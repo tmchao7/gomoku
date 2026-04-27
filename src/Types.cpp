@@ -5,12 +5,12 @@ namespace gomoku {
 std::string stoneName(Stone stone) {
     switch (stone) {
     case Stone::Black:
-        return "Black";
+        return "黑方";
     case Stone::White:
-        return "White";
+        return "白方";
     case Stone::Empty:
     default:
-        return "Empty";
+        return "空位";
     }
 }
 

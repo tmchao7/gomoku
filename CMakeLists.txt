@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
+
 add_library(gomoku_core
     src/Types.cpp
     src/Board.cpp
@@ -20,11 +22,10 @@ target_include_directories(gomoku_core
 
 add_executable(gomoku
     src/main.cpp
-    src/Game.cpp
-    src/UI.cpp
+    src/boardwidget.cpp
 )
 
-target_link_libraries(gomoku PRIVATE gomoku_core)
+target_link_libraries(gomoku PRIVATE gomoku_core Qt6::Widgets)
 
 add_executable(gomoku_tests
     tests/test_core.cpp

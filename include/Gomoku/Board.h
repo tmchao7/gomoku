@@ -22,6 +22,7 @@ public:
     bool isFull() const;
     bool hasFiveInRow(int row, int col) const;
     std::string render() const;
+    std::string render(int cursorRow, int cursorCol) const;
 
 private:
     std::array<std::array<Stone, kBoardSize>, kBoardSize> cells_;

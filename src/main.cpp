@@ -1,7 +1,13 @@
-#include "Gomoku/Game.h"
+#include "boardwidget.h"
 
-int main() {
-    gomoku::Game game;
-    game.run();
-    return 0;
+#include <QApplication>
+
+int main(int argc, char* argv[]) {
+    QApplication app(argc, argv);
+
+    BoardWidget boardWidget;
+    boardWidget.setWindowTitle("五子棋");
+    boardWidget.show();
+
+    return app.exec();
 }

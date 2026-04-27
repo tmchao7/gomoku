@@ -87,6 +87,10 @@ bool Board::hasFiveInRow(int row, int col) const {
 }
 
 std::string Board::render() const {
+    return render(-1, -1);
+}
+
+std::string Board::render(int cursorRow, int cursorCol) const {
     std::ostringstream out;
     out << "    ";
     for (int col = 1; col <= kBoardSize; ++col) {
@@ -97,7 +101,12 @@ std::string Board::render() const {
     for (int row = 0; row < kBoardSize; ++row) {
         out << std::setw(2) << row + 1 << "  ";
         for (int col = 0; col < kBoardSize; ++col) {
-            out << ' ' << stoneSymbol(cells_[row][col]) << ' ';
+            const char symbol = stoneSymbol(cells_[row][col]);
+            if (row == cursorRow && col == cursorCol) {
+                out << '[' << symbol << ']';
+            } else {
+                out << ' ' << symbol << ' ';
+            }
         }
         out << '\n';
     }
