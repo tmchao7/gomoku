@@ -12,6 +12,7 @@
 #include <vector>
 
 class QPushButton;
+class QTimer;
 
 class BoardWidget : public QWidget {
 public:
@@ -35,6 +36,11 @@ private:
         GameOver
     };
 
+    enum class ReplayPlaybackMode {
+        Manual,
+        Auto
+    };
+
     struct GameSnapshot {
         gomoku::Board board;
         gomoku::Stone currentStone;
@@ -55,7 +61,9 @@ private:
     InteractionState state_ = InteractionState::Playing;
     bool gameOver_ = false;
     bool replayMode_ = false;
+    ReplayPlaybackMode replayPlaybackMode_ = ReplayPlaybackMode::Manual;
     int replayStep_ = 0;
+    QTimer* autoReplayTimer_ = nullptr;
     std::vector<GameSnapshot> history_;
     std::vector<gomoku::FiveLineCandidate> selectableLines_;
     std::vector<gomoku::Position> selectedEndpoints_;
@@ -79,6 +87,7 @@ private:
     void updateControlButtons();
     void askPlayerNames();
     void askGameMode();
+    ReplayPlaybackMode askReplayPlaybackMode();
     void drawBoard(QPainter& painter);
     void drawSelectableLines(QPainter& painter);
     void drawStones(QPainter& painter);
@@ -100,6 +109,10 @@ private:
     void exitReplayMode();
     void showPreviousReplayStep();
     void showNextReplayStep();
+    void toggleAutoReplay();
+    void startAutoReplay();
+    void stopAutoReplay();
+    void advanceAutoReplay();
     void applyReplayStep();
     void showWinner(gomoku::Stone winner);
 };

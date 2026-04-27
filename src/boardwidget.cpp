@@ -21,6 +21,11 @@ BoardWidget::BoardWidget(QWidget* parent)
     setFixedSize(640, 680);
     setMouseTracking(true);
     setupControls();
+    autoReplayTimer_ = new QTimer(this);
+    autoReplayTimer_->setInterval(700);
+    connect(autoReplayTimer_, &QTimer::timeout, this, [this]() {
+        advanceAutoReplay();
+    });
 
     // 等窗口进入事件循环后再弹出姓名输入框，启动体验更自然。
     QTimer::singleShot(0, this, [this]() {
@@ -41,7 +46,9 @@ void BoardWidget::startNewGame() {
     state_ = InteractionState::Playing;
     gameOver_ = false;
     replayMode_ = false;
+    replayPlaybackMode_ = ReplayPlaybackMode::Manual;
     replayStep_ = 0;
+    stopAutoReplay();
     history_.clear();
     selectableLines_.clear();
     selectedEndpoints_.clear();
@@ -175,7 +182,11 @@ void BoardWidget::setupControls() {
 
     connect(undoButton_, &QPushButton::clicked, this, [this]() {
         if (replayMode_) {
-            showPreviousReplayStep();
+            if (replayPlaybackMode_ == ReplayPlaybackMode::Auto) {
+                toggleAutoReplay();
+            } else {
+                showPreviousReplayStep();
+            }
         } else {
             undoLastMove();
         }
@@ -206,13 +217,20 @@ void BoardWidget::updateControlButtons() {
         const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
             ? static_cast<int>(replaySnapshots_.size())
             : replay_.size();
-        undoButton_->setText("上一步");
-        resignButton_->setText("下一步");
+        if (replayPlaybackMode_ == ReplayPlaybackMode::Auto) {
+            undoButton_->setText(autoReplayTimer_->isActive() ? "暂停" : "继续");
+            resignButton_->setText("下一步");
+            undoButton_->setEnabled(replayStep_ < maxStep);
+            resignButton_->setEnabled(!autoReplayTimer_->isActive() && replayStep_ < maxStep);
+        } else {
+            undoButton_->setText("上一步");
+            resignButton_->setText("下一步");
+            undoButton_->setEnabled(replayStep_ > 0);
+            resignButton_->setEnabled(replayStep_ < maxStep);
+        }
         replayButton_->setText("退出复盘");
         restartButton_->setText("重新开始");
 
-        undoButton_->setEnabled(replayStep_ > 0);
-        resignButton_->setEnabled(replayStep_ < maxStep);
         replayButton_->setEnabled(true);
         restartButton_->setEnabled(true);
         return;
@@ -268,6 +286,22 @@ void BoardWidget::askGameMode() {
     } else {
         gameMode_ = gomoku::GameMode::Classic;
     }
+}
+
+BoardWidget::ReplayPlaybackMode BoardWidget::askReplayPlaybackMode() {
+    const QStringList modes = {"自动复盘", "手动复盘"};
+    bool ok = false;
+    const QString choice = QInputDialog::getItem(this,
+                                                "复盘模式",
+                                                "请选择复盘方式：",
+                                                modes,
+                                                0,
+                                                false,
+                                                &ok);
+    if (ok && choice == "自动复盘") {
+        return ReplayPlaybackMode::Auto;
+    }
+    return ReplayPlaybackMode::Manual;
 }
 
 void BoardWidget::drawBoard(QPainter& painter) {
@@ -411,7 +445,9 @@ void BoardWidget::drawStatusText(QPainter& painter) {
     painter.setFont(QFont("PingFang SC", 11));
     painter.drawText(QRect(0, height() - 26, width(), 22),
                      Qt::AlignCenter,
-                     replayMode_ ? "使用上一步/下一步查看历史落子"
+                     replayMode_ ? (replayPlaybackMode_ == ReplayPlaybackMode::Auto
+                                        ? "自动复盘中，可暂停、继续或退出复盘"
+                                        : "使用上一步/下一步查看历史落子")
                                  : "鼠标点击交叉点落子，可使用按钮悔棋、认输、复盘或重新开始");
 }
 
@@ -645,6 +681,8 @@ void BoardWidget::resignCurrentPlayer() {
 }
 
 void BoardWidget::enterReplayMode() {
+    replayPlaybackMode_ = askReplayPlaybackMode();
+
     if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
         if (history_.size() <= 1) {
             QMessageBox::information(this, "无法复盘", "当前还没有可以复盘的状态。");
@@ -660,6 +698,9 @@ void BoardWidget::enterReplayMode() {
         replayMode_ = true;
         replayStep_ = 0;
         applyReplayStep();
+        if (replayPlaybackMode_ == ReplayPlaybackMode::Auto) {
+            startAutoReplay();
+        }
         return;
     }
 
@@ -672,10 +713,15 @@ void BoardWidget::enterReplayMode() {
     replayMode_ = true;
     replayStep_ = 0;
     applyReplayStep();
+    if (replayPlaybackMode_ == ReplayPlaybackMode::Auto) {
+        startAutoReplay();
+    }
 }
 
 void BoardWidget::exitReplayMode() {
+    stopAutoReplay();
     replayMode_ = false;
+    replayPlaybackMode_ = ReplayPlaybackMode::Manual;
     replayStep_ = 0;
     replayBoard_.reset();
     updateControlButtons();
@@ -686,6 +732,7 @@ void BoardWidget::showPreviousReplayStep() {
     if (!replayMode_ || replayStep_ <= 0) {
         return;
     }
+    stopAutoReplay();
 
     --replayStep_;
     applyReplayStep();
@@ -701,6 +748,54 @@ void BoardWidget::showNextReplayStep() {
 
     ++replayStep_;
     applyReplayStep();
+}
+
+void BoardWidget::toggleAutoReplay() {
+    if (!replayMode_ || replayPlaybackMode_ != ReplayPlaybackMode::Auto) {
+        return;
+    }
+
+    if (autoReplayTimer_->isActive()) {
+        stopAutoReplay();
+    } else {
+        startAutoReplay();
+    }
+}
+
+void BoardWidget::startAutoReplay() {
+    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
+        ? static_cast<int>(replaySnapshots_.size())
+        : replay_.size();
+    if (!replayMode_ || replayStep_ >= maxStep) {
+        updateControlButtons();
+        return;
+    }
+
+    autoReplayTimer_->start();
+    updateControlButtons();
+}
+
+void BoardWidget::stopAutoReplay() {
+    if (autoReplayTimer_ != nullptr) {
+        autoReplayTimer_->stop();
+    }
+    updateControlButtons();
+}
+
+void BoardWidget::advanceAutoReplay() {
+    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
+        ? static_cast<int>(replaySnapshots_.size())
+        : replay_.size();
+    if (!replayMode_ || replayStep_ >= maxStep) {
+        stopAutoReplay();
+        return;
+    }
+
+    ++replayStep_;
+    applyReplayStep();
+    if (replayStep_ >= maxStep) {
+        stopAutoReplay();
+    }
 }
 
 void BoardWidget::applyReplayStep() {
