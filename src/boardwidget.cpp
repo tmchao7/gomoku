@@ -10,6 +10,7 @@
 #include <QPen>
 #include <QPushButton>
 #include <QString>
+#include <QStringList>
 #include <QTimer>
 
 #include <algorithm>
@@ -28,15 +29,22 @@ BoardWidget::BoardWidget(QWidget* parent)
 
 void BoardWidget::startNewGame() {
     askPlayerNames();
+    askGameMode();
 
     board_.reset();
     replayBoard_.reset();
     replay_.clear();
     replaySnapshots_.clear();
     currentStone_ = gomoku::Stone::Black;
+    scores_ = {0, 0};
+    state_ = InteractionState::Playing;
     gameOver_ = false;
     replayMode_ = false;
     replayStep_ = 0;
+    history_.clear();
+    selectableLines_.clear();
+    selectedEndpoints_.clear();
+    saveSnapshot("初始棋盘");
     updateControlButtons();
     update();
 }
@@ -50,6 +58,7 @@ void BoardWidget::paintEvent(QPaintEvent* event) {
     painter.fillRect(rect(), QColor(238, 200, 128));
     drawBoard(painter);
     drawStones(painter);
+    drawSelectableLines(painter);
     drawStatusText(painter);
 }
 
@@ -64,7 +73,11 @@ void BoardWidget::mousePressEvent(QMouseEvent* event) {
         return;
     }
 
-    placeStone(row, col);
+    if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        handleAdvancedClick(row, col);
+    } else {
+        placeStone(row, col);
+    }
 }
 
 int BoardWidget::cellSize() const {
@@ -99,6 +112,10 @@ bool BoardWidget::pixelToGrid(const QPoint& position, int& row, int& col) const 
     return (position - gridPoint).manhattanLength() <= clickTolerance;
 }
 
+int BoardWidget::playerIndex(gomoku::Stone stone) const {
+    return stone == gomoku::Stone::Black ? 0 : 1;
+}
+
 QString BoardWidget::currentPlayerName() const {
     return playerName(currentStone_);
 }
@@ -121,6 +138,10 @@ QString BoardWidget::stoneLabel(gomoku::Stone stone) const {
         return "白方";
     }
     return "空位";
+}
+
+QString BoardWidget::modeLabel() const {
+    return gameMode_ == gomoku::GameMode::Classic ? "普通模式" : "进阶模式";
 }
 
 gomoku::Stone BoardWidget::displayedStoneAt(int row, int col) const {
@@ -181,13 +202,16 @@ void BoardWidget::setupControls() {
 
 void BoardWidget::updateControlButtons() {
     if (replayMode_) {
+        const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
+            ? static_cast<int>(replaySnapshots_.size())
+            : replay_.size();
         undoButton_->setText("上一步");
         resignButton_->setText("下一步");
         replayButton_->setText("退出复盘");
         restartButton_->setText("重新开始");
 
         undoButton_->setEnabled(replayStep_ > 0);
-        resignButton_->setEnabled(replayStep_ < replay_.size());
+        resignButton_->setEnabled(replayStep_ < maxStep);
         replayButton_->setEnabled(true);
         restartButton_->setEnabled(true);
         return;
@@ -198,9 +222,10 @@ void BoardWidget::updateControlButtons() {
     replayButton_->setText("复盘");
     restartButton_->setText("重新开始");
 
-    undoButton_->setEnabled(!replay_.empty());
+    const bool hasAdvancedHistory = gameMode_ == gomoku::GameMode::AdvancedCapture && history_.size() > 1;
+    undoButton_->setEnabled(gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty());
     resignButton_->setEnabled(!gameOver_);
-    replayButton_->setEnabled(gameOver_ && !replay_.empty());
+    replayButton_->setEnabled(gameOver_ && (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty()));
     restartButton_->setEnabled(true);
 }
 
@@ -227,6 +252,23 @@ void BoardWidget::askPlayerNames() {
     }
 }
 
+void BoardWidget::askGameMode() {
+    const QStringList modes = {"普通模式", "进阶模式"};
+    bool ok = false;
+    const QString choice = QInputDialog::getItem(this,
+                                                "模式选择",
+                                                "请选择游戏模式：",
+                                                modes,
+                                                gameMode_ == gomoku::GameMode::Classic ? 0 : 1,
+                                                false,
+                                                &ok);
+    if (ok && choice == "进阶模式") {
+        gameMode_ = gomoku::GameMode::AdvancedCapture;
+    } else {
+        gameMode_ = gomoku::GameMode::Classic;
+    }
+}
+
 void BoardWidget::drawBoard(QPainter& painter) {
     const int size = cellSize();
     const int boardEnd = kMargin + boardPixelSize();
@@ -250,6 +292,40 @@ void BoardWidget::drawBoard(QPainter& painter) {
     };
     for (const auto& point : starPoints) {
         painter.drawEllipse(gridToPixel(point[0], point[1]), 5, 5);
+    }
+
+}
+
+void BoardWidget::drawSelectableLines(QPainter& painter) {
+    if (!replayMode_ && state_ != InteractionState::SelectingLine) {
+        return;
+    }
+
+    const QColor colors[] = {
+        QColor(210, 40, 40),
+        QColor(30, 110, 220),
+        QColor(30, 150, 70),
+        QColor(160, 80, 210),
+        QColor(230, 130, 20),
+        QColor(0, 150, 160),
+    };
+
+    int index = 0;
+    for (const gomoku::FiveLineCandidate& candidate : selectableLines_) {
+        if (candidate.positions.empty()) {
+            continue;
+        }
+
+        painter.setPen(QPen(colors[index % 6], 4, Qt::SolidLine, Qt::RoundCap));
+        const gomoku::Position first = candidate.positions.front();
+        const gomoku::Position last = candidate.positions.back();
+        painter.drawLine(gridToPixel(first.row, first.col), gridToPixel(last.row, last.col));
+
+        painter.setBrush(colors[index % 6]);
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(gridToPixel(first.row, first.col), 8, 8);
+        painter.drawEllipse(gridToPixel(last.row, last.col), 8, 8);
+        ++index;
     }
 }
 
@@ -292,11 +368,42 @@ void BoardWidget::drawStatusText(QPainter& painter) {
 
     QString text;
     if (replayMode_) {
-        text = QString("复盘中：第 %1 / %2 手").arg(replayStep_).arg(replay_.size());
+        const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
+            ? static_cast<int>(replaySnapshots_.size())
+            : replay_.size();
+        if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+            std::array<int, 2> replayScores = {0, 0};
+            if (replayStep_ > 0 && replayStep_ < static_cast<int>(history_.size())) {
+                replayScores = history_[static_cast<std::size_t>(replayStep_)].scores;
+            }
+            text = QString("复盘中：第 %1 / %2 步｜比分 黑 %3 : 白 %4")
+                       .arg(replayStep_)
+                       .arg(maxStep)
+                       .arg(replayScores[0])
+                       .arg(replayScores[1]);
+        } else {
+            text = QString("复盘中：第 %1 / %2 步").arg(replayStep_).arg(maxStep);
+        }
+    } else if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        if (state_ == InteractionState::SelectingLine) {
+            text = QString("%1：请选择要消除五连的两个端点").arg(modeLabel());
+        } else if (state_ == InteractionState::ConvertingStone) {
+            text = QString("%1：%2：%3 请选择一颗对方棋子转化")
+                       .arg(modeLabel(), stoneLabel(currentStone_), currentPlayerName());
+        } else if (gameOver_) {
+            text = "游戏结束";
+        } else {
+            text = QString("%1｜当前：%2：%3｜比分 黑 %4 : 白 %5")
+                       .arg(modeLabel(),
+                            stoneLabel(currentStone_),
+                            currentPlayerName())
+                       .arg(scores_[0])
+                       .arg(scores_[1]);
+        }
     } else {
         text = gameOver_
             ? "游戏结束"
-            : QString("当前回合：%1：%2").arg(stoneLabel(currentStone_), currentPlayerName());
+            : QString("%1｜当前回合：%2：%3").arg(modeLabel(), stoneLabel(currentStone_), currentPlayerName());
     }
     painter.drawText(QRect(0, height() - 52, width(), 28), Qt::AlignCenter, text);
 
@@ -326,6 +433,149 @@ void BoardWidget::placeStone(int row, int col) {
     switchPlayer();
 }
 
+void BoardWidget::handleAdvancedClick(int row, int col) {
+    if (state_ == InteractionState::Playing) {
+        if (!board_.placeStone(row, col, currentStone_)) {
+            return;
+        }
+        replay_.addMove({row, col, currentStone_, currentPlayerName().toStdString()});
+        beginLineSelection(row, col);
+        return;
+    }
+
+    if (state_ == InteractionState::SelectingLine) {
+        handleLineEndpointClick(row, col);
+        return;
+    }
+
+    if (state_ == InteractionState::ConvertingStone) {
+        handleConversionClick(row, col);
+    }
+}
+
+void BoardWidget::handleLineEndpointClick(int row, int col) {
+    const gomoku::Position clicked{row, col};
+    const bool isEndpoint = std::any_of(selectableLines_.begin(), selectableLines_.end(),
+                                        [clicked](const gomoku::FiveLineCandidate& candidate) {
+                                            return !candidate.positions.empty() &&
+                                                   (candidate.positions.front() == clicked ||
+                                                    candidate.positions.back() == clicked);
+                                        });
+    if (!isEndpoint) {
+        QMessageBox::information(this, "选择无效", "请选择彩色线段两端的端点。");
+        return;
+    }
+
+    if (selectedEndpoints_.empty()) {
+        selectedEndpoints_.push_back(clicked);
+        update();
+        return;
+    }
+
+    selectedEndpoints_.push_back(clicked);
+    for (const gomoku::FiveLineCandidate& candidate : selectableLines_) {
+        if (candidate.positions.empty()) {
+            continue;
+        }
+        const bool sameDirection =
+            (candidate.positions.front() == selectedEndpoints_[0] &&
+             candidate.positions.back() == selectedEndpoints_[1]) ||
+            (candidate.positions.front() == selectedEndpoints_[1] &&
+             candidate.positions.back() == selectedEndpoints_[0]);
+        if (sameDirection) {
+            resolveSelectedLine(candidate);
+            return;
+        }
+    }
+
+    selectedEndpoints_.clear();
+    QMessageBox::information(this, "选择无效", "请选择同一条连续五子两端。");
+    update();
+}
+
+void BoardWidget::handleConversionClick(int row, int col) {
+    if (board_.at(row, col) != gomoku::oppositeStone(currentStone_)) {
+        QMessageBox::information(this, "选择无效", "请选择一颗对方棋子进行转化。");
+        return;
+    }
+
+    board_.replaceStone(row, col, currentStone_);
+    beginLineSelection(row, col);
+}
+
+bool BoardWidget::hasOpponentStone(gomoku::Stone stone) const {
+    const gomoku::Stone opponent = gomoku::oppositeStone(stone);
+    for (int row = 0; row < kBoardSize; ++row) {
+        for (int col = 0; col < kBoardSize; ++col) {
+            if (board_.at(row, col) == opponent) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void BoardWidget::beginLineSelection(int row, int col) {
+    selectableLines_ = board_.fiveLineCandidates(row, col);
+    selectedEndpoints_.clear();
+    if (selectableLines_.empty()) {
+        finishAdvancedAction();
+        return;
+    }
+
+    state_ = InteractionState::SelectingLine;
+    saveSnapshot(QString("%1：%2 形成五连，等待选择").arg(stoneLabel(currentStone_), currentPlayerName()));
+    updateControlButtons();
+    update();
+}
+
+void BoardWidget::resolveSelectedLine(const gomoku::FiveLineCandidate& candidate) {
+    board_.removeStones(candidate.positions);
+    ++scores_[playerIndex(currentStone_)];
+    selectableLines_.clear();
+    selectedEndpoints_.clear();
+
+    if (scores_[playerIndex(currentStone_)] >= kWinningScore) {
+        gameOver_ = true;
+        state_ = InteractionState::GameOver;
+        saveSnapshot(QString("%1：%2 消除五连并获胜").arg(stoneLabel(currentStone_), currentPlayerName()));
+        updateControlButtons();
+        update();
+        showWinner(currentStone_);
+        return;
+    }
+
+    if (!hasOpponentStone(currentStone_)) {
+        finishAdvancedAction();
+        return;
+    }
+
+    state_ = InteractionState::ConvertingStone;
+    saveSnapshot(QString("%1：%2 消除五连得分，等待转化").arg(stoneLabel(currentStone_), currentPlayerName()));
+    updateControlButtons();
+    update();
+}
+
+void BoardWidget::finishAdvancedAction() {
+    state_ = InteractionState::Playing;
+    switchPlayer();
+    saveSnapshot(QString("切换到 %1：%2").arg(stoneLabel(currentStone_), currentPlayerName()));
+}
+
+void BoardWidget::saveSnapshot(const QString& label) {
+    history_.push_back({board_, currentStone_, scores_, state_, gameOver_, label});
+}
+
+void BoardWidget::restoreSnapshot(const GameSnapshot& snapshot) {
+    board_ = snapshot.board;
+    currentStone_ = snapshot.currentStone;
+    scores_ = snapshot.scores;
+    state_ = snapshot.state;
+    gameOver_ = snapshot.gameOver;
+    selectableLines_.clear();
+    selectedEndpoints_.clear();
+}
+
 void BoardWidget::switchPlayer() {
     currentStone_ = gomoku::oppositeStone(currentStone_);
     updateControlButtons();
@@ -334,6 +584,18 @@ void BoardWidget::switchPlayer() {
 
 void BoardWidget::undoLastMove() {
     if (replayMode_) {
+        return;
+    }
+
+    if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        if (history_.size() <= 1) {
+            QMessageBox::information(this, "无法悔棋", "当前还没有可以撤销的状态。");
+            return;
+        }
+        history_.pop_back();
+        restoreSnapshot(history_.back());
+        updateControlButtons();
+        update();
         return;
     }
 
@@ -382,6 +644,24 @@ void BoardWidget::resignCurrentPlayer() {
 }
 
 void BoardWidget::enterReplayMode() {
+    if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        if (history_.size() <= 1) {
+            QMessageBox::information(this, "无法复盘", "当前还没有可以复盘的状态。");
+            return;
+        }
+        replaySnapshots_.clear();
+        selectableLines_.clear();
+        selectedEndpoints_.clear();
+        for (std::size_t i = 1; i < history_.size(); ++i) {
+            const GameSnapshot& snapshot = history_[i];
+            replaySnapshots_.push_back(snapshot.board);
+        }
+        replayMode_ = true;
+        replayStep_ = 0;
+        applyReplayStep();
+        return;
+    }
+
     if (replay_.empty()) {
         QMessageBox::information(this, "无法复盘", "当前还没有可以复盘的落子。");
         return;
@@ -411,7 +691,10 @@ void BoardWidget::showPreviousReplayStep() {
 }
 
 void BoardWidget::showNextReplayStep() {
-    if (!replayMode_ || replayStep_ >= replay_.size()) {
+    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
+        ? static_cast<int>(replaySnapshots_.size())
+        : replay_.size();
+    if (!replayMode_ || replayStep_ >= maxStep) {
         return;
     }
 
@@ -430,8 +713,11 @@ void BoardWidget::applyReplayStep() {
 }
 
 void BoardWidget::showWinner(gomoku::Stone winner) {
-    const QString winnerText = QString("%1：%2 获胜！")
-        .arg(stoneLabel(winner), playerName(winner));
+    const QString winnerText = gameMode_ == gomoku::GameMode::AdvancedCapture
+        ? QString("%1：%2 先得 %3 分，获胜！")
+              .arg(stoneLabel(winner), playerName(winner))
+              .arg(kWinningScore)
+        : QString("%1：%2 获胜！").arg(stoneLabel(winner), playerName(winner));
     QMessageBox::information(this, "游戏结束", winnerText);
 
     const QMessageBox::StandardButton choice = QMessageBox::question(

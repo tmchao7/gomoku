@@ -13,6 +13,20 @@ enum class Stone {
     White
 };
 
+enum class GameMode {
+    Classic,
+    AdvancedCapture
+};
+
+struct Position {
+    int row;
+    int col;
+};
+
+inline bool operator==(const Position& lhs, const Position& rhs) {
+    return lhs.row == rhs.row && lhs.col == rhs.col;
+}
+
 struct Move {
     int row;
     int col;

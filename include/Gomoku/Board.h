@@ -4,10 +4,15 @@
 #include "Gomoku/Types.h"
 
 #include <array>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace gomoku {
+
+struct FiveLineCandidate {
+    std::vector<Position> positions;
+};
 
 class Board {
 public:
@@ -18,9 +23,15 @@ public:
     bool isEmpty(int row, int col) const;
     bool placeStone(int row, int col, Stone stone);
     bool removeStone(int row, int col);
+    void removeStones(const std::vector<Position>& positions);
+    bool replaceStone(int row, int col, Stone stone);
     Stone at(int row, int col) const;
     bool isFull() const;
     bool hasFiveInRow(int row, int col) const;
+    std::vector<FiveLineCandidate> fiveLineCandidates(int row, int col) const;
+    std::optional<FiveLineCandidate> findFiveLineByEndpoints(Position first,
+                                                             Position second,
+                                                             Stone stone) const;
     std::string render() const;
     std::string render(int cursorRow, int cursorCol) const;
 
