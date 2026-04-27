@@ -30,9 +30,14 @@ void BoardWidget::startNewGame() {
     askPlayerNames();
 
     board_.reset();
+    replayBoard_.reset();
     replay_.clear();
+    replaySnapshots_.clear();
     currentStone_ = gomoku::Stone::Black;
     gameOver_ = false;
+    replayMode_ = false;
+    replayStep_ = 0;
+    updateControlButtons();
     update();
 }
 
@@ -49,7 +54,7 @@ void BoardWidget::paintEvent(QPaintEvent* event) {
 }
 
 void BoardWidget::mousePressEvent(QMouseEvent* event) {
-    if (gameOver_ || event->button() != Qt::LeftButton) {
+    if (gameOver_ || replayMode_ || event->button() != Qt::LeftButton) {
         return;
     }
 
@@ -118,15 +123,23 @@ QString BoardWidget::stoneLabel(gomoku::Stone stone) const {
     return "空位";
 }
 
+gomoku::Stone BoardWidget::displayedStoneAt(int row, int col) const {
+    if (replayMode_) {
+        return replayBoard_.at(row, col);
+    }
+    return board_.at(row, col);
+}
+
 void BoardWidget::setupControls() {
     undoButton_ = new QPushButton("悔棋", this);
     resignButton_ = new QPushButton("认输", this);
+    replayButton_ = new QPushButton("复盘", this);
     restartButton_ = new QPushButton("重新开始", this);
 
     const int buttonWidth = 96;
     const int buttonHeight = 32;
     const int spacing = 12;
-    const int totalWidth = buttonWidth * 3 + spacing * 2;
+    const int totalWidth = buttonWidth * 4 + spacing * 3;
     int left = (width() - totalWidth) / 2;
     const int top = height() - 92;
 
@@ -134,17 +147,61 @@ void BoardWidget::setupControls() {
     left += buttonWidth + spacing;
     resignButton_->setGeometry(left, top, buttonWidth, buttonHeight);
     left += buttonWidth + spacing;
+    replayButton_->setGeometry(left, top, buttonWidth, buttonHeight);
+    left += buttonWidth + spacing;
     restartButton_->setGeometry(left, top, buttonWidth, buttonHeight);
 
     connect(undoButton_, &QPushButton::clicked, this, [this]() {
-        undoLastMove();
+        if (replayMode_) {
+            showPreviousReplayStep();
+        } else {
+            undoLastMove();
+        }
     });
     connect(resignButton_, &QPushButton::clicked, this, [this]() {
-        resignCurrentPlayer();
+        if (replayMode_) {
+            showNextReplayStep();
+        } else {
+            resignCurrentPlayer();
+        }
+    });
+    connect(replayButton_, &QPushButton::clicked, this, [this]() {
+        if (replayMode_) {
+            exitReplayMode();
+        } else {
+            enterReplayMode();
+        }
     });
     connect(restartButton_, &QPushButton::clicked, this, [this]() {
         startNewGame();
     });
+
+    updateControlButtons();
+}
+
+void BoardWidget::updateControlButtons() {
+    if (replayMode_) {
+        undoButton_->setText("上一步");
+        resignButton_->setText("下一步");
+        replayButton_->setText("退出复盘");
+        restartButton_->setText("重新开始");
+
+        undoButton_->setEnabled(replayStep_ > 0);
+        resignButton_->setEnabled(replayStep_ < replay_.size());
+        replayButton_->setEnabled(true);
+        restartButton_->setEnabled(true);
+        return;
+    }
+
+    undoButton_->setText("悔棋");
+    resignButton_->setText("认输");
+    replayButton_->setText("复盘");
+    restartButton_->setText("重新开始");
+
+    undoButton_->setEnabled(!replay_.empty());
+    resignButton_->setEnabled(!gameOver_);
+    replayButton_->setEnabled(gameOver_ && !replay_.empty());
+    restartButton_->setEnabled(true);
 }
 
 void BoardWidget::askPlayerNames() {
@@ -201,7 +258,7 @@ void BoardWidget::drawStones(QPainter& painter) {
 
     for (int row = 0; row < kBoardSize; ++row) {
         for (int col = 0; col < kBoardSize; ++col) {
-            const gomoku::Stone stone = board_.at(row, col);
+            const gomoku::Stone stone = displayedStoneAt(row, col);
             if (stone == gomoku::Stone::Empty) {
                 continue;
             }
@@ -233,15 +290,21 @@ void BoardWidget::drawStatusText(QPainter& painter) {
     painter.setPen(QColor(45, 30, 18));
     painter.setFont(QFont("PingFang SC", 16, QFont::DemiBold));
 
-    const QString text = gameOver_
-        ? "游戏结束"
-        : QString("当前回合：%1：%2").arg(stoneLabel(currentStone_), currentPlayerName());
+    QString text;
+    if (replayMode_) {
+        text = QString("复盘中：第 %1 / %2 手").arg(replayStep_).arg(replay_.size());
+    } else {
+        text = gameOver_
+            ? "游戏结束"
+            : QString("当前回合：%1：%2").arg(stoneLabel(currentStone_), currentPlayerName());
+    }
     painter.drawText(QRect(0, height() - 52, width(), 28), Qt::AlignCenter, text);
 
     painter.setFont(QFont("PingFang SC", 11));
     painter.drawText(QRect(0, height() - 26, width(), 22),
                      Qt::AlignCenter,
-                     "鼠标点击交叉点落子，可使用按钮悔棋、认输或重新开始");
+                     replayMode_ ? "使用上一步/下一步查看历史落子"
+                                 : "鼠标点击交叉点落子，可使用按钮悔棋、认输、复盘或重新开始");
 }
 
 void BoardWidget::placeStone(int row, int col) {
@@ -250,10 +313,12 @@ void BoardWidget::placeStone(int row, int col) {
     }
     replay_.addMove({row, col, currentStone_, currentPlayerName().toStdString()});
 
+    updateControlButtons();
     update();
 
     if (board_.hasFiveInRow(row, col)) {
         gameOver_ = true;
+        updateControlButtons();
         showWinner(currentStone_);
         return;
     }
@@ -263,10 +328,15 @@ void BoardWidget::placeStone(int row, int col) {
 
 void BoardWidget::switchPlayer() {
     currentStone_ = gomoku::oppositeStone(currentStone_);
+    updateControlButtons();
     update();
 }
 
 void BoardWidget::undoLastMove() {
+    if (replayMode_) {
+        return;
+    }
+
     if (replay_.empty()) {
         QMessageBox::information(this, "无法悔棋", "当前还没有可以撤销的落子。");
         return;
@@ -281,26 +351,96 @@ void BoardWidget::undoLastMove() {
     replay_.undoLastMove();
     currentStone_ = lastMove.stone;
     gameOver_ = false;
+    updateControlButtons();
     update();
 }
 
 void BoardWidget::resignCurrentPlayer() {
-    if (gameOver_) {
+    if (gameOver_ || replayMode_) {
         return;
     }
 
     const gomoku::Stone loser = currentStone_;
     const gomoku::Stone winner = gomoku::oppositeStone(loser);
     gameOver_ = true;
+    updateControlButtons();
     update();
 
     const QString message = QString("%1：%2 认输。\n%3：%4 获胜！")
         .arg(stoneLabel(loser), playerName(loser), stoneLabel(winner), playerName(winner));
     QMessageBox::information(this, "游戏结束", message);
+
+    const QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        "复盘",
+        "是否立即进入复盘？",
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (choice == QMessageBox::Yes) {
+        enterReplayMode();
+    }
+}
+
+void BoardWidget::enterReplayMode() {
+    if (replay_.empty()) {
+        QMessageBox::information(this, "无法复盘", "当前还没有可以复盘的落子。");
+        return;
+    }
+
+    replaySnapshots_ = replay_.snapshots();
+    replayMode_ = true;
+    replayStep_ = 0;
+    applyReplayStep();
+}
+
+void BoardWidget::exitReplayMode() {
+    replayMode_ = false;
+    replayStep_ = 0;
+    replayBoard_.reset();
+    updateControlButtons();
+    update();
+}
+
+void BoardWidget::showPreviousReplayStep() {
+    if (!replayMode_ || replayStep_ <= 0) {
+        return;
+    }
+
+    --replayStep_;
+    applyReplayStep();
+}
+
+void BoardWidget::showNextReplayStep() {
+    if (!replayMode_ || replayStep_ >= replay_.size()) {
+        return;
+    }
+
+    ++replayStep_;
+    applyReplayStep();
+}
+
+void BoardWidget::applyReplayStep() {
+    replayBoard_.reset();
+    if (replayStep_ > 0 && replayStep_ <= static_cast<int>(replaySnapshots_.size())) {
+        replayBoard_ = replaySnapshots_[static_cast<std::size_t>(replayStep_ - 1)];
+    }
+
+    updateControlButtons();
+    update();
 }
 
 void BoardWidget::showWinner(gomoku::Stone winner) {
     const QString winnerText = QString("%1：%2 获胜！")
         .arg(stoneLabel(winner), playerName(winner));
     QMessageBox::information(this, "游戏结束", winnerText);
+
+    const QMessageBox::StandardButton choice = QMessageBox::question(
+        this,
+        "复盘",
+        "是否立即进入复盘？",
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::Yes);
+    if (choice == QMessageBox::Yes) {
+        enterReplayMode();
+    }
 }

@@ -1,6 +1,7 @@
 #include "Gomoku/Board.h"
 #include "Gomoku/Replay.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -69,6 +70,65 @@ void testReplayRecordsAndUndo() {
     require(snapshots[0].at(0, 1) == gomoku::Stone::Empty, "snapshot should not contain undone move");
 }
 
+bool containsPosition(const std::vector<gomoku::Position>& positions, int row, int col) {
+    return std::any_of(positions.begin(), positions.end(), [row, col](const gomoku::Position& position) {
+        return position.row == row && position.col == col;
+    });
+}
+
+void testFiveLineCandidates() {
+    gomoku::Board board;
+    for (int col = 2; col <= 6; ++col) {
+        require(board.placeStone(7, col, gomoku::Stone::Black), "place horizontal candidate stone");
+    }
+    for (int row = 5; row <= 9; ++row) {
+        if (row != 7) {
+            require(board.placeStone(row, 4, gomoku::Stone::Black), "place vertical candidate stone");
+        }
+    }
+
+    const auto candidates = board.fiveLineCandidates(7, 4);
+    require(candidates.size() == 2, "cross move should create two five-line candidates");
+    require(candidates[0].positions.size() == 5, "candidate should contain exactly five stones");
+    require(candidates[1].positions.size() == 5, "candidate should contain exactly five stones");
+
+    int candidatesWithCenter = 0;
+    for (const auto& candidate : candidates) {
+        if (containsPosition(candidate.positions, 7, 4)) {
+            ++candidatesWithCenter;
+        }
+    }
+    require(candidatesWithCenter == 2, "all candidates should include the triggering move");
+}
+
+void testFindCandidateByEndpointsAndRemove() {
+    gomoku::Board board;
+    for (int col = 1; col <= 5; ++col) {
+        require(board.placeStone(3, col, gomoku::Stone::White), "place removable line stone");
+    }
+
+    const auto candidate = board.findFiveLineByEndpoints({3, 1}, {3, 5}, gomoku::Stone::White);
+    require(candidate.has_value(), "matching endpoints should identify a five-line candidate");
+    require(candidate->positions.size() == 5, "endpoint candidate should contain five stones");
+
+    board.removeStones(candidate->positions);
+    for (int col = 1; col <= 5; ++col) {
+        require(board.at(3, col) == gomoku::Stone::Empty, "removed line should become empty");
+    }
+
+    const auto invalid = board.findFiveLineByEndpoints({3, 1}, {3, 4}, gomoku::Stone::White);
+    require(!invalid.has_value(), "four-stone endpoint span should be invalid");
+}
+
+void testReplaceStone() {
+    gomoku::Board board;
+    require(board.placeStone(4, 4, gomoku::Stone::White), "place stone to replace");
+    require(board.replaceStone(4, 4, gomoku::Stone::Black), "replace occupied stone should succeed");
+    require(board.at(4, 4) == gomoku::Stone::Black, "stone should be replaced by black");
+    require(!board.replaceStone(0, 0, gomoku::Stone::Black), "replacing empty cell should fail");
+    require(!board.replaceStone(4, 4, gomoku::Stone::Empty), "replacing with empty should fail");
+}
+
 } // namespace
 
 int main() {
@@ -77,6 +137,9 @@ int main() {
     testDiagonalWins();
     testInvalidMovesAndUndo();
     testReplayRecordsAndUndo();
+    testFiveLineCandidates();
+    testFindCandidateByEndpointsAndRemove();
+    testReplaceStone();
 
     std::cout << "All core tests passed.\n";
     return 0;

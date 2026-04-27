@@ -9,6 +9,7 @@
 #include <QWidget>
 
 #include <array>
+#include <vector>
 
 class QPushButton;
 
@@ -28,11 +29,16 @@ private:
 
     gomoku::Board board_;
     gomoku::Replay replay_;
+    gomoku::Board replayBoard_;
+    std::vector<gomoku::Board> replaySnapshots_;
     gomoku::Stone currentStone_ = gomoku::Stone::Black;
     std::array<QString, 2> playerNames_ = {"黑方玩家", "白方玩家"};
     bool gameOver_ = false;
+    bool replayMode_ = false;
+    int replayStep_ = 0;
     QPushButton* undoButton_ = nullptr;
     QPushButton* resignButton_ = nullptr;
+    QPushButton* replayButton_ = nullptr;
     QPushButton* restartButton_ = nullptr;
 
     int cellSize() const;
@@ -42,8 +48,10 @@ private:
     QString currentPlayerName() const;
     QString playerName(gomoku::Stone stone) const;
     QString stoneLabel(gomoku::Stone stone) const;
+    gomoku::Stone displayedStoneAt(int row, int col) const;
 
     void setupControls();
+    void updateControlButtons();
     void askPlayerNames();
     void drawBoard(QPainter& painter);
     void drawStones(QPainter& painter);
@@ -52,6 +60,11 @@ private:
     void switchPlayer();
     void undoLastMove();
     void resignCurrentPlayer();
+    void enterReplayMode();
+    void exitReplayMode();
+    void showPreviousReplayStep();
+    void showNextReplayStep();
+    void applyReplayStep();
     void showWinner(gomoku::Stone winner);
 };
 
