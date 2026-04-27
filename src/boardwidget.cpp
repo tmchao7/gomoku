@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QInputDialog>
 #include <QLinearGradient>
+#include <QLineEdit>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>

@@ -1,5 +1,6 @@
 #include "Gomoku/Board.h"
 
+#include <cstddef>
 #include <cstdlib>
 #include <iomanip>
 #include <sstream>
