@@ -2,7 +2,7 @@
 
 ## 一、需求分析
 
-本系统实现一个基于 C++17 + Qt6 Widgets 的图形界面五子棋游戏。玩家通过鼠标点击 15 x 15 棋盘交叉点直接落子，黑白双方轮流下棋。程序需要阻止重复落子，并在横向、纵向或斜向形成五子连珠时弹窗提示赢家。
+本系统实现一个基于 C++17 + Qt6 Widgets 的图形界面五子棋游戏。玩家启动程序后先注册黑方和白方姓名，再通过鼠标点击 15 x 15 棋盘交叉点直接落子，黑白双方轮流下棋。程序需要阻止重复落子，支持悔棋、认输、重新开始，并在横向、纵向或斜向形成五子连珠时弹窗提示“阵营 + 玩家姓名”。
 
 ## 二、总体设计
 
@@ -45,9 +45,12 @@ main -> BoardWidget -> Board
 职责：
 
 - 使用 `QPainter` 绘制棋盘线、星位和棋子。
+- 使用 `QInputDialog` 输入黑方、白方玩家姓名。
 - 使用 `mousePressEvent` 接收鼠标点击。
 - 将鼠标坐标转换成棋盘行列。
 - 调用 `Board::placeStone` 完成落子。
+- 使用 `Replay` 记录落子历史，并支持悔棋。
+- 提供悔棋、认输、重新开始按钮。
 - 黑白双方轮流切换。
 - 调用 `Board::hasFiveInRow` 判断胜利。
 - 使用 `QMessageBox` 弹窗提示赢家。
@@ -74,13 +77,30 @@ main -> BoardWidget -> Board
 ## 四、关键交互流程
 
 ```text
+启动游戏
+  -> 输入黑方姓名
+  -> 输入白方姓名
+  -> 黑方先手
+
 鼠标点击
   -> BoardWidget::mousePressEvent
   -> 像素坐标转换为棋盘 row / col
   -> Board::placeStone(row, col, currentStone)
+  -> Replay::addMove
   -> Board::hasFiveInRow(row, col)
-  -> 若胜利，QMessageBox 提示赢家
+  -> 若胜利，QMessageBox 提示“阵营 + 玩家姓名”
   -> 否则切换当前玩家
+
+悔棋
+  -> 读取 Replay 最后一步
+  -> Board::removeStone
+  -> Replay::undoLastMove
+  -> 当前回合回到被撤销的玩家
+
+认输
+  -> 当前回合玩家认输
+  -> 对方获胜
+  -> QMessageBox 显示双方姓名和胜负结果
 ```
 
 ## 五、构建设计
