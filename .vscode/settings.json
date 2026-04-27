@@ -1,0 +1,9 @@
+{
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.cppStandard": "c++17",
+    "C_Cpp.default.intelliSenseMode": "macos-clang-arm64",
+    "cmake.configureArgs": [
+        "-DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt"
+    ],
+    "cmake.buildDirectory": "${workspaceFolder}/build"
+}
