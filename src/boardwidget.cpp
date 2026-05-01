@@ -115,6 +115,7 @@ bool BoardWidget::pixelToGrid(const QPoint& position, int& row, int& col) const 
     col = std::clamp(col, 0, kBoardSize - 1);
     row = std::clamp(row, 0, kBoardSize - 1);
 
+    // 曼哈顿距离容差 = 半格大小，允许玩家点击交叉点附近而非要求精确命中
     const QPoint gridPoint = gridToPixel(row, col);
     const int clickTolerance = size / 2;
     return (position - gridPoint).manhattanLength() <= clickTolerance;
@@ -242,7 +243,7 @@ void BoardWidget::updateControlButtons() {
     restartButton_->setText("重新开始");
 
     const bool hasAdvancedHistory = gameMode_ == gomoku::GameMode::AdvancedCapture && history_.size() > 1;
-    undoButton_->setEnabled(gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty());
+    undoButton_->setEnabled(!gameOver_ && (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty()));
     resignButton_->setEnabled(!gameOver_);
     replayButton_->setEnabled(gameOver_ && (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty()));
     restartButton_->setEnabled(true);
@@ -475,7 +476,6 @@ void BoardWidget::handleAdvancedClick(int row, int col) {
         if (!board_.placeStone(row, col, currentStone_)) {
             return;
         }
-        replay_.addMove({row, col, currentStone_, currentPlayerName().toStdString()});
         beginLineSelection(row, col);
         return;
     }
@@ -624,6 +624,7 @@ void BoardWidget::undoLastMove() {
         return;
     }
 
+    // 进阶模式用快照栈 undo：每次状态变更都保存完整 GameSnapshot，弹出栈顶即可回退
     if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
         if (history_.size() <= 1) {
             QMessageBox::information(this, "无法悔棋", "当前还没有可以撤销的状态。");

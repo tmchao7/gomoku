@@ -29,6 +29,7 @@ private:
     static constexpr int kStonePadding = 4;
     static constexpr int kWinningScore = 3;
 
+    // 进阶模式状态机：Playing→(成五)SelectingLine→(消除)ConvertingStone→(成五链)SelectingLine/Playing→(3分)GameOver
     enum class InteractionState {
         Playing,
         SelectingLine,

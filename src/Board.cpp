@@ -86,6 +86,7 @@ bool Board::hasFiveInRow(int row, int col) const {
         return false;
     }
 
+    // 四个方向：水平、垂直、主对角线、副对角线。每个方向以落子为中心向正反两侧计数。
     const int directions[4][2] = {
         {0, 1},
         {1, 0},
@@ -124,6 +125,7 @@ std::vector<FiveLineCandidate> Board::fiveLineCandidates(int row, int col) const
     };
 
     for (const auto& direction : directions) {
+        // 先退到该方向连续同色棋子的起点，再沿方向滑动 5 子窗口收集所有候选
         std::vector<Position> line;
         int currentRow = row;
         int currentCol = col;
@@ -143,6 +145,7 @@ std::vector<FiveLineCandidate> Board::fiveLineCandidates(int row, int col) const
             continue;
         }
 
+        // 滑动窗口：对长度 ≥5 的连续线段，保留包含触发位置的 5 子窗口
         for (std::size_t start = 0; start + 5 <= line.size(); ++start) {
             FiveLineCandidate candidate;
             candidate.positions.assign(line.begin() + static_cast<std::ptrdiff_t>(start),
@@ -171,6 +174,7 @@ std::optional<FiveLineCandidate> Board::findFiveLineByEndpoints(Position first,
     const int stepRow = (deltaRow == 0) ? 0 : (deltaRow > 0 ? 1 : -1);
     const int stepCol = (deltaCol == 0) ? 0 : (deltaCol > 0 ? 1 : -1);
 
+    // 两个端点必须恰好相距 4 格（共 5 颗棋子），且方向为水平/垂直/对角线
     if (stepRow == 0 && stepCol == 0) {
         return std::nullopt;
     }
