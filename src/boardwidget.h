@@ -2,6 +2,7 @@
 #define BOARDWIDGET_H
 
 #include "Gomoku/Board.h"
+#include "Gomoku/Player.h"
 #include "Gomoku/Replay.h"
 
 #include <QPoint>
@@ -57,7 +58,9 @@ private:
     std::vector<gomoku::Board> replaySnapshots_;
     gomoku::Stone currentStone_ = gomoku::Stone::Black;
     gomoku::GameMode gameMode_ = gomoku::GameMode::Classic;
-    std::array<QString, 2> playerNames_ = {"黑方玩家", "白方玩家"};
+    std::array<gomoku::Player, 2> players_ = {
+        gomoku::Player("黑方玩家", gomoku::Stone::Black),
+        gomoku::Player("白方玩家", gomoku::Stone::White)};
     std::array<int, 2> scores_ = {0, 0};
     InteractionState state_ = InteractionState::Playing;
     bool gameOver_ = false;
@@ -77,6 +80,7 @@ private:
     int boardPixelSize() const;
     QPoint gridToPixel(int row, int col) const;
     bool pixelToGrid(const QPoint& position, int& row, int& col) const;
+    int maxReplayStep() const;
     int playerIndex(gomoku::Stone stone) const;
     QString currentPlayerName() const;
     QString playerName(gomoku::Stone stone) const;

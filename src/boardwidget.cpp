@@ -125,28 +125,23 @@ int BoardWidget::playerIndex(gomoku::Stone stone) const {
     return stone == gomoku::Stone::Black ? 0 : 1;
 }
 
+int BoardWidget::maxReplayStep() const {
+    return gameMode_ == gomoku::GameMode::AdvancedCapture
+        ? static_cast<int>(replaySnapshots_.size())
+        : replay_.size();
+}
+
 QString BoardWidget::currentPlayerName() const {
     return playerName(currentStone_);
 }
 
 QString BoardWidget::playerName(gomoku::Stone stone) const {
-    if (stone == gomoku::Stone::Black) {
-        return playerNames_[0];
-    }
-    if (stone == gomoku::Stone::White) {
-        return playerNames_[1];
-    }
-    return "未知玩家";
+    const int idx = playerIndex(stone);
+    return QString::fromStdString(players_[idx].name());
 }
 
 QString BoardWidget::stoneLabel(gomoku::Stone stone) const {
-    if (stone == gomoku::Stone::Black) {
-        return "黑方";
-    }
-    if (stone == gomoku::Stone::White) {
-        return "白方";
-    }
-    return "空位";
+    return QString::fromStdString(gomoku::stoneName(stone));
 }
 
 QString BoardWidget::modeLabel() const {
@@ -215,9 +210,7 @@ void BoardWidget::setupControls() {
 
 void BoardWidget::updateControlButtons() {
     if (replayMode_) {
-        const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
-            ? static_cast<int>(replaySnapshots_.size())
-            : replay_.size();
+        const int maxStep = maxReplayStep();
         if (replayPlaybackMode_ == ReplayPlaybackMode::Auto) {
             undoButton_->setText(autoReplayTimer_->isActive() ? "暂停" : "继续");
             resignButton_->setText("下一步");
@@ -255,20 +248,20 @@ void BoardWidget::askPlayerNames() {
                                               "玩家注册",
                                               "请输入黑方姓名：",
                                               QLineEdit::Normal,
-                                              playerNames_[0],
+                                              QString::fromStdString(players_[0].name()),
                                               &ok);
     if (ok && !blackName.trimmed().isEmpty()) {
-        playerNames_[0] = blackName.trimmed();
+        players_[0] = gomoku::Player(blackName.trimmed().toStdString(), gomoku::Stone::Black);
     }
 
     QString whiteName = QInputDialog::getText(this,
                                               "玩家注册",
                                               "请输入白方姓名：",
                                               QLineEdit::Normal,
-                                              playerNames_[1],
+                                              QString::fromStdString(players_[1].name()),
                                               &ok);
     if (ok && !whiteName.trimmed().isEmpty()) {
-        playerNames_[1] = whiteName.trimmed();
+        players_[1] = gomoku::Player(whiteName.trimmed().toStdString(), gomoku::Stone::White);
     }
 }
 
@@ -282,10 +275,9 @@ void BoardWidget::askGameMode() {
                                                 gameMode_ == gomoku::GameMode::Classic ? 0 : 1,
                                                 false,
                                                 &ok);
-    if (ok && choice == "进阶模式") {
-        gameMode_ = gomoku::GameMode::AdvancedCapture;
-    } else {
-        gameMode_ = gomoku::GameMode::Classic;
+    if (ok) {
+        gameMode_ = (choice == modes[1]) ? gomoku::GameMode::AdvancedCapture
+                                         : gomoku::GameMode::Classic;
     }
 }
 
@@ -333,7 +325,7 @@ void BoardWidget::drawBoard(QPainter& painter) {
 }
 
 void BoardWidget::drawSelectableLines(QPainter& painter) {
-    if (!replayMode_ && state_ != InteractionState::SelectingLine) {
+    if (state_ != InteractionState::SelectingLine) {
         return;
     }
 
@@ -367,6 +359,17 @@ void BoardWidget::drawSelectableLines(QPainter& painter) {
 
 void BoardWidget::drawStones(QPainter& painter) {
     const int radius = cellSize() / 2 - kStonePadding;
+    const int diameter = radius * 2;
+
+    QLinearGradient blackGradient(0, 0, diameter, diameter);
+    blackGradient.setColorAt(0.0, QColor(70, 70, 70));
+    blackGradient.setColorAt(1.0, QColor(5, 5, 5));
+    const QBrush blackBrush(blackGradient);
+
+    QLinearGradient whiteGradient(0, 0, diameter, diameter);
+    whiteGradient.setColorAt(0.0, QColor(255, 255, 255));
+    whiteGradient.setColorAt(1.0, QColor(210, 210, 210));
+    const QBrush whiteBrush(whiteGradient);
 
     for (int row = 0; row < kBoardSize; ++row) {
         for (int col = 0; col < kBoardSize; ++col) {
@@ -377,19 +380,13 @@ void BoardWidget::drawStones(QPainter& painter) {
 
             const QPoint center = gridToPixel(row, col);
             const QRect stoneRect(center.x() - radius, center.y() - radius,
-                                  radius * 2, radius * 2);
+                                  diameter, diameter);
 
             if (stone == gomoku::Stone::Black) {
-                QLinearGradient gradient(stoneRect.topLeft(), stoneRect.bottomRight());
-                gradient.setColorAt(0.0, QColor(70, 70, 70));
-                gradient.setColorAt(1.0, QColor(5, 5, 5));
-                painter.setBrush(QBrush(gradient));
+                painter.setBrush(blackBrush);
                 painter.setPen(QPen(QColor(10, 10, 10), 1));
             } else {
-                QLinearGradient gradient(stoneRect.topLeft(), stoneRect.bottomRight());
-                gradient.setColorAt(0.0, QColor(255, 255, 255));
-                gradient.setColorAt(1.0, QColor(210, 210, 210));
-                painter.setBrush(QBrush(gradient));
+                painter.setBrush(whiteBrush);
                 painter.setPen(QPen(QColor(120, 120, 120), 1));
             }
 
@@ -400,13 +397,14 @@ void BoardWidget::drawStones(QPainter& painter) {
 
 void BoardWidget::drawStatusText(QPainter& painter) {
     painter.setPen(QColor(45, 30, 18));
-    painter.setFont(QFont("PingFang SC", 16, QFont::DemiBold));
+    QFont statusFont;
+    statusFont.setPointSize(16);
+    statusFont.setBold(true);
+    painter.setFont(statusFont);
 
     QString text;
     if (replayMode_) {
-        const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
-            ? static_cast<int>(replaySnapshots_.size())
-            : replay_.size();
+        const int maxStep = maxReplayStep();
         if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
             std::array<int, 2> replayScores = {0, 0};
             if (replayStep_ > 0 && replayStep_ < static_cast<int>(history_.size())) {
@@ -443,7 +441,9 @@ void BoardWidget::drawStatusText(QPainter& painter) {
     }
     painter.drawText(QRect(0, height() - 52, width(), 28), Qt::AlignCenter, text);
 
-    painter.setFont(QFont("PingFang SC", 11));
+    QFont hintFont;
+    hintFont.setPointSize(11);
+    painter.setFont(hintFont);
     painter.drawText(QRect(0, height() - 26, width(), 22),
                      Qt::AlignCenter,
                      replayMode_ ? (replayPlaybackMode_ == ReplayPlaybackMode::Auto
@@ -465,6 +465,14 @@ void BoardWidget::placeStone(int row, int col) {
         gameOver_ = true;
         updateControlButtons();
         showWinner(currentStone_);
+        return;
+    }
+
+    if (board_.isFull()) {
+        gameOver_ = true;
+        updateControlButtons();
+        update();
+        QMessageBox::information(this, "游戏结束", "棋盘已满，平局！");
         return;
     }
 
@@ -594,6 +602,16 @@ void BoardWidget::resolveSelectedLine(const gomoku::FiveLineCandidate& candidate
 }
 
 void BoardWidget::finishAdvancedAction() {
+    if (board_.isFull()) {
+        gameOver_ = true;
+        state_ = InteractionState::GameOver;
+        saveSnapshot("棋盘已满，平局");
+        updateControlButtons();
+        update();
+        QMessageBox::information(this, "游戏结束", "棋盘已满，平局！");
+        return;
+    }
+
     state_ = InteractionState::Playing;
     switchPlayer();
     saveSnapshot(QString("切换到 %1：%2").arg(stoneLabel(currentStone_), currentPlayerName()));
@@ -740,9 +758,7 @@ void BoardWidget::showPreviousReplayStep() {
 }
 
 void BoardWidget::showNextReplayStep() {
-    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
-        ? static_cast<int>(replaySnapshots_.size())
-        : replay_.size();
+    const int maxStep = maxReplayStep();
     if (!replayMode_ || replayStep_ >= maxStep) {
         return;
     }
@@ -764,9 +780,7 @@ void BoardWidget::toggleAutoReplay() {
 }
 
 void BoardWidget::startAutoReplay() {
-    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
-        ? static_cast<int>(replaySnapshots_.size())
-        : replay_.size();
+    const int maxStep = maxReplayStep();
     if (!replayMode_ || replayStep_ >= maxStep) {
         updateControlButtons();
         return;
@@ -784,9 +798,7 @@ void BoardWidget::stopAutoReplay() {
 }
 
 void BoardWidget::advanceAutoReplay() {
-    const int maxStep = gameMode_ == gomoku::GameMode::AdvancedCapture
-        ? static_cast<int>(replaySnapshots_.size())
-        : replay_.size();
+    const int maxStep = maxReplayStep();
     if (!replayMode_ || replayStep_ >= maxStep) {
         stopAutoReplay();
         return;

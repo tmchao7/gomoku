@@ -11,9 +11,13 @@ if(MSVC)
     add_compile_options(/utf-8)
 endif()
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
-add_library(gomoku_core
+add_library(gomoku_core STATIC
     src/Types.cpp
     src/Board.cpp
     src/Player.cpp

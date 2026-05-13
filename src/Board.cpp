@@ -175,19 +175,11 @@ std::optional<FiveLineCandidate> Board::findFiveLineByEndpoints(Position first,
     const int stepCol = (deltaCol == 0) ? 0 : (deltaCol > 0 ? 1 : -1);
 
     // 两个端点必须恰好相距 4 格（共 5 颗棋子），且方向为水平/垂直/对角线
-    if (stepRow == 0 && stepCol == 0) {
-        return std::nullopt;
-    }
-    if (deltaRow != 0 && deltaCol != 0 && std::abs(deltaRow) != std::abs(deltaCol)) {
-        return std::nullopt;
-    }
-    if (deltaRow != 0 && deltaCol == 0 && std::abs(deltaRow) != 4) {
-        return std::nullopt;
-    }
-    if (deltaRow == 0 && deltaCol != 0 && std::abs(deltaCol) != 4) {
-        return std::nullopt;
-    }
-    if (deltaRow != 0 && deltaCol != 0 && std::abs(deltaRow) != 4) {
+    const int absDR = std::abs(deltaRow);
+    const int absDC = std::abs(deltaCol);
+    const bool isStraightLine = (deltaRow == 0 || deltaCol == 0 || absDR == absDC);
+    const bool isFiveLong = std::max(absDR, absDC) == 4;
+    if (!isStraightLine || !isFiveLong || (stepRow == 0 && stepCol == 0)) {
         return std::nullopt;
     }
 
