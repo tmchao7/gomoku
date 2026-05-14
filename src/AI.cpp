@@ -1,6 +1,5 @@
 #include "Gomoku/AI.h"
 
-#include <algorithm>
 #include <cmath>
 #include <limits>
 
