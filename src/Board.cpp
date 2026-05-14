@@ -174,7 +174,8 @@ std::optional<FiveLineCandidate> Board::findFiveLineByEndpoints(Position first,
     const int stepRow = (deltaRow == 0) ? 0 : (deltaRow > 0 ? 1 : -1);
     const int stepCol = (deltaCol == 0) ? 0 : (deltaCol > 0 ? 1 : -1);
 
-    // 两个端点必须恰好相距 4 格（共 5 颗棋子），且方向为水平/垂直/对角线
+    // 两个端点必须恰好相距 4 格（共 5 颗棋子），且方向为水平/垂直/对角线。
+    // 这里先校验几何关系，再逐格检查棋子颜色，避免把非连续五子误判为可消除线段。
     const int absDR = std::abs(deltaRow);
     const int absDC = std::abs(deltaCol);
     const bool isStraightLine = (deltaRow == 0 || deltaCol == 0 || absDR == absDC);

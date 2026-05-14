@@ -15,6 +15,8 @@
 class QPushButton;
 class QTimer;
 
+// BoardWidget 是 GUI 层的集中控制器：负责绘制、鼠标输入、按钮状态、
+// 普通/进阶模式流程、悔棋和复盘。核心棋盘规则仍委托给 gomoku::Board。
 class BoardWidget : public QWidget {
 public:
     explicit BoardWidget(QWidget* parent = nullptr);
@@ -43,6 +45,8 @@ private:
         Auto
     };
 
+    // 进阶模式一次操作可能包含落子、消除、得分、转化和连锁。
+    // 因此悔棋/复盘不能只记录 Move，而要保存完整游戏状态快照。
     struct GameSnapshot {
         gomoku::Board board;
         gomoku::Stone currentStone;
@@ -54,6 +58,9 @@ private:
 
     gomoku::Board board_;
     gomoku::Replay replay_;
+
+    // 复盘显示专用棋盘：进入复盘后 drawStones() 读取 replayBoard_，
+    // 避免复盘前进/后退时直接改动真实对局棋盘 board_。
     gomoku::Board replayBoard_;
     std::vector<gomoku::Board> replaySnapshots_;
     gomoku::Stone currentStone_ = gomoku::Stone::Black;
@@ -68,6 +75,8 @@ private:
     ReplayPlaybackMode replayPlaybackMode_ = ReplayPlaybackMode::Manual;
     int replayStep_ = 0;
     QTimer* autoReplayTimer_ = nullptr;
+
+    // 仅进阶模式使用的完整快照栈。普通模式使用 replay_ 的落子列表即可。
     std::vector<GameSnapshot> history_;
     std::vector<gomoku::FiveLineCandidate> selectableLines_;
     std::vector<gomoku::Position> selectedEndpoints_;

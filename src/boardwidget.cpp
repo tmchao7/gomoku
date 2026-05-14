@@ -115,7 +115,8 @@ bool BoardWidget::pixelToGrid(const QPoint& position, int& row, int& col) const 
     col = std::clamp(col, 0, kBoardSize - 1);
     row = std::clamp(row, 0, kBoardSize - 1);
 
-    // 曼哈顿距离容差 = 半格大小，允许玩家点击交叉点附近而非要求精确命中
+    // 曼哈顿距离容差 = 半格大小，允许玩家点击交叉点附近而非要求精确命中。
+    // 先四舍五入到最近交叉点，再用距离过滤掉明显偏离棋盘线的点击。
     const QPoint gridPoint = gridToPixel(row, col);
     const int clickTolerance = size / 2;
     return (position - gridPoint).manhattanLength() <= clickTolerance;
@@ -456,6 +457,8 @@ void BoardWidget::placeStone(int row, int col) {
     if (!board_.placeStone(row, col, currentStone_)) {
         return;
     }
+
+    // 普通模式的历史只需要记录落子序列；悔棋和复盘都能从最后一步 Move 还原。
     replay_.addMove({row, col, currentStone_, currentPlayerName().toStdString()});
 
     updateControlButtons();
@@ -561,6 +564,8 @@ bool BoardWidget::hasOpponentStone(gomoku::Stone stone) const {
 }
 
 void BoardWidget::beginLineSelection(int row, int col) {
+    // 进阶模式每次“落子或转化”后都从触发点重新寻找五连。
+    // 如果没有候选五连，说明当前玩家的连锁流程结束，可以切换回合。
     selectableLines_ = board_.fiveLineCandidates(row, col);
     selectedEndpoints_.clear();
     if (selectableLines_.empty()) {
@@ -575,6 +580,8 @@ void BoardWidget::beginLineSelection(int row, int col) {
 }
 
 void BoardWidget::resolveSelectedLine(const gomoku::FiveLineCandidate& candidate) {
+    // 选择合法五连后，先移除五颗棋子并加分；是否进入转化阶段取决于是否已获胜、
+    // 以及棋盘上是否还存在可转化的对方棋子。
     board_.removeStones(candidate.positions);
     ++scores_[playerIndex(currentStone_)];
     selectableLines_.clear();
@@ -602,6 +609,8 @@ void BoardWidget::resolveSelectedLine(const gomoku::FiveLineCandidate& candidate
 }
 
 void BoardWidget::finishAdvancedAction() {
+    // 只有进阶模式的一整轮连锁结束后才会调用这里切换玩家。
+    // 这保证“消除 -> 转化 -> 再次成五”的过程始终属于同一个当前玩家。
     if (board_.isFull()) {
         gameOver_ = true;
         state_ = InteractionState::GameOver;
@@ -710,6 +719,8 @@ void BoardWidget::enterReplayMode() {
         replaySnapshots_.clear();
         selectableLines_.clear();
         selectedEndpoints_.clear();
+
+        // 进阶模式复盘直接使用历史快照中的棋盘状态，跳过第 0 个初始空棋盘。
         for (std::size_t i = 1; i < history_.size(); ++i) {
             const GameSnapshot& snapshot = history_[i];
             replaySnapshots_.push_back(snapshot.board);
@@ -728,6 +739,7 @@ void BoardWidget::enterReplayMode() {
         return;
     }
 
+    // 普通模式复盘由 Replay 根据落子列表重建每一步棋盘。
     replaySnapshots_ = replay_.snapshots();
     replayMode_ = true;
     replayStep_ = 0;
@@ -812,6 +824,8 @@ void BoardWidget::advanceAutoReplay() {
 }
 
 void BoardWidget::applyReplayStep() {
+    // 复盘只更新 replayBoard_，真实对局棋盘 board_ 保持不变。
+    // replayStep_ 为 0 时显示空棋盘，之后显示第 replayStep_ 个历史快照。
     replayBoard_.reset();
     if (replayStep_ > 0 && replayStep_ <= static_cast<int>(replaySnapshots_.size())) {
         replayBoard_ = replaySnapshots_[static_cast<std::size_t>(replayStep_ - 1)];

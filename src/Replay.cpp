@@ -34,6 +34,8 @@ std::vector<Board> Replay::snapshots() const {
     std::vector<Board> result;
     Board board;
 
+    // 普通模式复盘不直接保存每一步棋盘，而是在需要复盘时从落子历史重建。
+    // 这样 Replay 的存储量只和落子数量有关，也保持它不依赖 GUI 层状态。
     for (const Move& move : moves_) {
         board.placeStone(move.row, move.col, move.stone);
         result.push_back(board);
