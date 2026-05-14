@@ -22,6 +22,7 @@ add_library(gomoku_core STATIC
     src/Board.cpp
     src/Player.cpp
     src/Replay.cpp
+    src/AI.cpp
 )
 
 target_include_directories(gomoku_core
