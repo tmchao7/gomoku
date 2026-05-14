@@ -2,6 +2,7 @@
 
 namespace gomoku {
 
+/// 棋子中文名，用于界面显示
 std::string stoneName(Stone stone) {
     switch (stone) {
     case Stone::Black:
@@ -14,6 +15,7 @@ std::string stoneName(Stone stone) {
     }
 }
 
+/// 棋子符号，用于控制台文本渲染
 char stoneSymbol(Stone stone) {
     switch (stone) {
     case Stone::Black:
@@ -26,6 +28,7 @@ char stoneSymbol(Stone stone) {
     }
 }
 
+/// 返回对方棋子颜色：黑 ↔ 白，空则返回空
 Stone oppositeStone(Stone stone) {
     if (stone == Stone::Black) {
         return Stone::White;
