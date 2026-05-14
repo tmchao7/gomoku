@@ -148,7 +148,14 @@ QString BoardWidget::stoneLabel(gomoku::Stone stone) const {
 }
 
 QString BoardWidget::modeLabel() const {
-    return gameMode_ == gomoku::GameMode::Classic ? "普通模式" : "进阶模式";
+    if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        return "进阶模式";
+    }
+    if (ai_ != nullptr) {
+        return ai_->difficulty() == gomoku::AI::Difficulty::Easy
+            ? "人机模式（简单）" : "人机模式（困难）";
+    }
+    return "玩家对战";
 }
 
 gomoku::Stone BoardWidget::displayedStoneAt(int row, int col) const {
