@@ -16,6 +16,8 @@
 
 #include <algorithm>
 
+#include "Gomoku/AI.h"
+
 BoardWidget::BoardWidget(QWidget* parent)
     : QWidget(parent) {
     setFixedSize(640, 680);
@@ -267,18 +269,43 @@ void BoardWidget::askPlayerNames() {
 }
 
 void BoardWidget::askGameMode() {
-    const QStringList modes = {"普通模式", "进阶模式"};
+    const QStringList modes = {
+        "玩家对战-普通",
+        "玩家对战-进阶",
+        "人机-简单",
+        "人机-困难"
+    };
     bool ok = false;
+
+    // 根据当前 gameMode_ 和 ai_ 状态确定默认选中项
+    int defaultIndex = 0;
+    if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
+        defaultIndex = 1;
+    } else if (ai_ != nullptr) {
+        defaultIndex = (ai_->difficulty() == gomoku::AI::Difficulty::Easy) ? 2 : 3;
+    }
+
     const QString choice = QInputDialog::getItem(this,
-                                                "模式选择",
-                                                "请选择游戏模式：",
-                                                modes,
-                                                gameMode_ == gomoku::GameMode::Classic ? 0 : 1,
-                                                false,
-                                                &ok);
-    if (ok) {
-        gameMode_ = (choice == modes[1]) ? gomoku::GameMode::AdvancedCapture
-                                         : gomoku::GameMode::Classic;
+                                                  "模式选择",
+                                                  "请选择游戏模式：",
+                                                  modes,
+                                                  defaultIndex,
+                                                  false,
+                                                  &ok);
+    if (!ok) return;
+
+    if (choice == modes[0]) {
+        gameMode_ = gomoku::GameMode::Classic;
+        ai_.reset();
+    } else if (choice == modes[1]) {
+        gameMode_ = gomoku::GameMode::AdvancedCapture;
+        ai_.reset();
+    } else if (choice == modes[2]) {
+        gameMode_ = gomoku::GameMode::Classic;
+        ai_ = std::make_unique<gomoku::AI>(gomoku::AI::Difficulty::Easy, gomoku::Stone::White);
+    } else {
+        gameMode_ = gomoku::GameMode::Classic;
+        ai_ = std::make_unique<gomoku::AI>(gomoku::AI::Difficulty::Hard, gomoku::Stone::White);
     }
 }
 

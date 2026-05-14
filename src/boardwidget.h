@@ -1,6 +1,7 @@
 #ifndef BOARDWIDGET_H
 #define BOARDWIDGET_H
 
+#include "Gomoku/AI.h"
 #include "Gomoku/Board.h"
 #include "Gomoku/Player.h"
 #include "Gomoku/Replay.h"
@@ -10,6 +11,7 @@
 #include <QWidget>
 
 #include <array>
+#include <memory>
 #include <vector>
 
 class QPushButton;
@@ -56,6 +58,7 @@ private:
         QString label;
     };
 
+    std::unique_ptr<gomoku::AI> ai_;
     gomoku::Board board_;
     gomoku::Replay replay_;
 
