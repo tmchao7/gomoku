@@ -59,6 +59,7 @@ private:
     };
 
     std::unique_ptr<gomoku::AI> ai_;
+    gomoku::Position lastMove_{-1, -1};
     gomoku::Board board_;
     gomoku::Replay replay_;
 

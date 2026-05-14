@@ -54,6 +54,7 @@ void BoardWidget::startNewGame() {
     history_.clear();
     selectableLines_.clear();
     selectedEndpoints_.clear();
+    lastMove_ = {-1, -1};
     saveSnapshot("初始棋盘");
     updateControlButtons();
     update();
@@ -153,8 +154,7 @@ QString BoardWidget::modeLabel() const {
         return "进阶模式";
     }
     if (ai_ != nullptr) {
-        return ai_->difficulty() == gomoku::AI::Difficulty::Easy
-            ? "人机模式（简单）" : "人机模式（困难）";
+        return "人机模式";
     }
     return "玩家对战";
 }
@@ -283,8 +283,7 @@ void BoardWidget::askGameMode() {
     const QStringList modes = {
         "玩家对战-普通",
         "玩家对战-进阶",
-        "人机-简单",
-        "人机-困难"
+        "人机模式"
     };
     bool ok = false;
 
@@ -293,7 +292,7 @@ void BoardWidget::askGameMode() {
     if (gameMode_ == gomoku::GameMode::AdvancedCapture) {
         defaultIndex = 1;
     } else if (ai_ != nullptr) {
-        defaultIndex = (ai_->difficulty() == gomoku::AI::Difficulty::Easy) ? 2 : 3;
+        defaultIndex = 2;
     }
 
     const QString choice = QInputDialog::getItem(this,
@@ -311,12 +310,9 @@ void BoardWidget::askGameMode() {
     } else if (choice == modes[1]) {
         gameMode_ = gomoku::GameMode::AdvancedCapture;
         ai_.reset();
-    } else if (choice == modes[2]) {
-        gameMode_ = gomoku::GameMode::Classic;
-        ai_ = std::make_unique<gomoku::AI>(gomoku::AI::Difficulty::Easy, gomoku::Stone::White);
     } else {
         gameMode_ = gomoku::GameMode::Classic;
-        ai_ = std::make_unique<gomoku::AI>(gomoku::AI::Difficulty::Hard, gomoku::Stone::White);
+        ai_ = std::make_unique<gomoku::AI>(gomoku::Stone::White);
     }
 }
 
@@ -432,6 +428,15 @@ void BoardWidget::drawStones(QPainter& painter) {
             painter.drawEllipse(stoneRect);
         }
     }
+
+    // 高亮最近一步落子：在棋子上画红色小圆点
+    if (lastMove_.row >= 0 && lastMove_.col >= 0) {
+        const QPoint center = gridToPixel(lastMove_.row, lastMove_.col);
+        const int dotRadius = cellSize() / 6;
+        painter.setBrush(QColor(220, 40, 40));
+        painter.setPen(Qt::NoPen);
+        painter.drawEllipse(center, dotRadius, dotRadius);
+    }
 }
 
 void BoardWidget::drawStatusText(QPainter& painter) {
@@ -498,6 +503,7 @@ void BoardWidget::placeStone(int row, int col) {
 
     // 普通模式的历史只需要记录落子序列；悔棋和复盘都能从最后一步 Move 还原。
     replay_.addMove({row, col, currentStone_, currentPlayerName().toStdString()});
+    lastMove_ = {row, col};
 
     updateControlButtons();
     update();
@@ -936,6 +942,7 @@ void BoardWidget::executeAIMove() {
 
     replay_.addMove({pos.row, pos.col, ai_->aiStone(),
                      playerName(ai_->aiStone()).toStdString()});
+    lastMove_ = {pos.row, pos.col};
 
     update();
 
