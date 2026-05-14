@@ -1,5 +1,29 @@
+# Build outputs
 build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+
+# OS / editor files
 .DS_Store
 *.user
 *.suo
 *.vcxproj.user
+.vscode/.browse.VC.db*
+
+# Office / document files
+*.docx
+~$*.docx
+
+# AI assistant local notes
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+.claude/
+.codex/
+.cursor/
+docs/codex-docx-guidance.md
+docs/superpowers/
+*.ai.md
+*.prompt.md
