@@ -73,7 +73,8 @@ void BoardWidget::paintEvent(QPaintEvent* event) {
 }
 
 void BoardWidget::mousePressEvent(QMouseEvent* event) {
-    if (gameOver_ || replayMode_ || event->button() != Qt::LeftButton) {
+    if (gameOver_ || replayMode_ || event->button() != Qt::LeftButton
+        || (ai_ && currentStone_ == ai_->aiStone())) {
         return;
     }
 
@@ -898,6 +899,13 @@ void BoardWidget::applyReplayStep() {
 
 void BoardWidget::triggerAITurn() {
     if (gameOver_) return;
+
+    // 防止 AI 回合同一时间被多次触发（如在 300ms 延迟内连续点击）
+    if (currentStone_ != ai_->aiStone()) {
+        // 第一次进入：把 currentStone_ 先切为 AI 的棋色，
+        // mousePressEvent 的 turn 检查就会拒绝玩家的后续点击。
+        currentStone_ = ai_->aiStone();
+    }
 
     // 禁用按钮防止玩家在 AI 思考期间操作
     undoButton_->setEnabled(false);
