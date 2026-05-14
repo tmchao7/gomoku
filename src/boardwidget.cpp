@@ -239,8 +239,11 @@ void BoardWidget::updateControlButtons() {
     restartButton_->setText("重新开始");
 
     const bool hasAdvancedHistory = gameMode_ == gomoku::GameMode::AdvancedCapture && history_.size() > 1;
-    undoButton_->setEnabled(!gameOver_ && (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty()));
-    resignButton_->setEnabled(!gameOver_);
+    const bool aiThinking = ai_ && currentStone_ == ai_->aiStone() && !gameOver_;
+    undoButton_->setEnabled(!gameOver_ && !aiThinking &&
+        (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory
+         : (ai_ ? replay_.size() >= 2 : !replay_.empty())));
+    resignButton_->setEnabled(!gameOver_ && !aiThinking);
     replayButton_->setEnabled(gameOver_ && (gameMode_ == gomoku::GameMode::AdvancedCapture ? hasAdvancedHistory : !replay_.empty()));
     restartButton_->setEnabled(true);
 }
@@ -506,7 +509,11 @@ void BoardWidget::placeStone(int row, int col) {
         return;
     }
 
-    switchPlayer();
+    if (ai_) {
+        triggerAITurn();
+    } else {
+        switchPlayer();
+    }
 }
 
 void BoardWidget::handleAdvancedClick(int row, int col) {
@@ -675,6 +682,26 @@ void BoardWidget::switchPlayer() {
 
 void BoardWidget::undoLastMove() {
     if (replayMode_) {
+        return;
+    }
+
+    // 人机模式：一次撤销两步（AI 的落子 + 玩家上一步）
+    if (ai_) {
+        if (replay_.size() < 2) {
+            QMessageBox::information(this, "无法悔棋", "当前还没有可以撤销的状态。");
+            return;
+        }
+        // 撤销 AI 的落子
+        const gomoku::Move aiMove = replay_.moves().back();
+        board_.removeStone(aiMove.row, aiMove.col);
+        replay_.undoLastMove();
+        // 撤销玩家上一步
+        const gomoku::Move playerMove = replay_.moves().back();
+        board_.removeStone(playerMove.row, playerMove.col);
+        replay_.undoLastMove();
+        gameOver_ = false;
+        updateControlButtons();
+        update();
         return;
     }
 
@@ -860,6 +887,60 @@ void BoardWidget::applyReplayStep() {
 
     updateControlButtons();
     update();
+}
+
+void BoardWidget::triggerAITurn() {
+    if (gameOver_) return;
+
+    // 禁用按钮防止玩家在 AI 思考期间操作
+    undoButton_->setEnabled(false);
+    resignButton_->setEnabled(false);
+    replayButton_->setEnabled(false);
+    restartButton_->setEnabled(false);
+    update();
+
+    // 延迟 300ms 执行，让玩家看到自己的落子结果
+    QTimer::singleShot(300, this, [this]() {
+        executeAIMove();
+    });
+}
+
+void BoardWidget::executeAIMove() {
+    if (gameOver_) {
+        updateControlButtons();
+        update();
+        return;
+    }
+
+    const gomoku::Position pos = ai_->bestMove(board_);
+    if (!board_.placeStone(pos.row, pos.col, ai_->aiStone())) {
+        updateControlButtons();
+        update();
+        return;
+    }
+
+    replay_.addMove({pos.row, pos.col, ai_->aiStone(),
+                     playerName(ai_->aiStone()).toStdString()});
+
+    update();
+
+    if (board_.hasFiveInRow(pos.row, pos.col)) {
+        gameOver_ = true;
+        updateControlButtons();
+        update();
+        showWinner(ai_->aiStone());
+        return;
+    }
+
+    if (board_.isFull()) {
+        gameOver_ = true;
+        updateControlButtons();
+        update();
+        QMessageBox::information(this, "游戏结束", "棋盘已满，平局！");
+        return;
+    }
+
+    switchPlayer();
 }
 
 void BoardWidget::showWinner(gomoku::Stone winner) {

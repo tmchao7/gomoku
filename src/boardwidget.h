@@ -132,6 +132,8 @@ private:
     void advanceAutoReplay();
     void applyReplayStep();
     void showWinner(gomoku::Stone winner);
+    void triggerAITurn();
+    void executeAIMove();
 };
 
 #endif // BOARDWIDGET_H
