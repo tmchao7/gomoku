@@ -1,5 +1,6 @@
 #include "Gomoku/Board.h"
 #include "Gomoku/Replay.h"
+#include "Gomoku/AI.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -129,6 +130,57 @@ void testReplaceStone() {
     require(!board.replaceStone(4, 4, gomoku::Stone::Empty), "replacing with empty should fail");
 }
 
+void testAIEvaluate() {
+    gomoku::Board board;
+    gomoku::AI ai(gomoku::AI::Difficulty::Easy, gomoku::Stone::White);
+    const gomoku::Position move = ai.bestMove(board);
+    require(board.isEmpty(move.row, move.col), "AI move should be on an empty cell");
+    require(board.isInside(move.row, move.col), "AI move should be inside the board");
+}
+
+void testAIEasyDefend() {
+    // Black has four in a row at (7,4)-(7,7). AI (White) must block at (7,3) or (7,8).
+    gomoku::Board board;
+    require(board.placeStone(7, 4, gomoku::Stone::Black), "set up");
+    require(board.placeStone(7, 5, gomoku::Stone::Black), "set up");
+    require(board.placeStone(7, 6, gomoku::Stone::Black), "set up");
+    require(board.placeStone(7, 7, gomoku::Stone::Black), "set up");
+
+    gomoku::AI ai(gomoku::AI::Difficulty::Easy, gomoku::Stone::White);
+    const gomoku::Position move = ai.bestMove(board);
+    const bool blocks = (move.row == 7 && move.col == 3) || (move.row == 7 && move.col == 8);
+    require(blocks, "Easy AI should block Black's open four");
+}
+
+void testAIHardMustWin() {
+    // White has four at (3,2)-(3,5). Hard AI (White) should complete the five at (3,1) or (3,6).
+    gomoku::Board board;
+    require(board.placeStone(3, 2, gomoku::Stone::White), "set up");
+    require(board.placeStone(3, 3, gomoku::Stone::White), "set up");
+    require(board.placeStone(3, 4, gomoku::Stone::White), "set up");
+    require(board.placeStone(3, 5, gomoku::Stone::White), "set up");
+
+    gomoku::AI ai(gomoku::AI::Difficulty::Hard, gomoku::Stone::White);
+    const gomoku::Position move = ai.bestMove(board);
+    const bool wins = (move.row == 3 && (move.col == 1 || move.col == 6));
+    require(wins, "Hard AI should complete its own five-in-a-row");
+}
+
+void testAIBlockOpponentWin() {
+    // Black has four at (0,0)-(0,3) — a closed four (left edge blocks one end).
+    // Hard AI (White) must block at (0,4) to prevent Black from completing five.
+    gomoku::Board board;
+    require(board.placeStone(0, 0, gomoku::Stone::Black), "set up");
+    require(board.placeStone(0, 1, gomoku::Stone::Black), "set up");
+    require(board.placeStone(0, 2, gomoku::Stone::Black), "set up");
+    require(board.placeStone(0, 3, gomoku::Stone::Black), "set up");
+
+    gomoku::AI ai(gomoku::AI::Difficulty::Hard, gomoku::Stone::White);
+    const gomoku::Position move = ai.bestMove(board);
+    const bool blocks = (move.row == 0 && move.col == 4);
+    require(blocks, "Hard AI should block opponent's closed four at the board edge");
+}
+
 } // namespace
 
 int main() {
@@ -140,6 +192,10 @@ int main() {
     testFiveLineCandidates();
     testFindCandidateByEndpointsAndRemove();
     testReplaceStone();
+    testAIEvaluate();
+    testAIEasyDefend();
+    testAIHardMustWin();
+    testAIBlockOpponentWin();
 
     std::cout << "All core tests passed.\n";
     return 0;
