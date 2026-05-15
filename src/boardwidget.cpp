@@ -535,6 +535,7 @@ void BoardWidget::handleAdvancedClick(int row, int col) {
         if (!board_.placeStone(row, col, currentStone_)) {
             return;
         }
+        lastMove_ = {row, col};
         beginLineSelection(row, col);
         return;
     }
@@ -596,6 +597,7 @@ void BoardWidget::handleConversionClick(int row, int col) {
     }
 
     board_.replaceStone(row, col, currentStone_);
+    lastMove_ = {row, col};
     beginLineSelection(row, col);
 }
 
