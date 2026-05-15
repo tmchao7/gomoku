@@ -664,10 +664,16 @@ void BoardWidget::finishAdvancedAction() {
     if (board_.isFull()) {
         gameOver_ = true;
         state_ = InteractionState::GameOver;
-        saveSnapshot("棋盘已满，平局");
         updateControlButtons();
         update();
-        QMessageBox::information(this, "游戏结束", "棋盘已满，平局！");
+
+        if (scores_[0] > scores_[1]) {
+            showWinner(gomoku::Stone::Black);
+        } else if (scores_[1] > scores_[0]) {
+            showWinner(gomoku::Stone::White);
+        } else {
+            QMessageBox::information(this, "游戏结束", "棋盘已满，平局！");
+        }
         return;
     }
 
